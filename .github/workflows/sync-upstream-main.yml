@@ -1,0 +1,42 @@
+# Keeps maxzylam/postgwas_v2 main identical to upstream JIBINJOHNV/postgwas_v2 main.
+# Fast-forward only: if main ever diverges, the job fails loudly instead of merging.
+# Lives on the fork-sync branch (set as the fork's default branch) so main stays a pure mirror.
+name: Sync main from upstream (ff-only)
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"   # every 6 hours (UTC)
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Fast-forward main from upstream
+        run: |
+          set -euo pipefail
+          git remote add upstream https://github.com/JIBINJOHNV/postgwas_v2.git
+          git fetch upstream main
+          before=$(git rev-parse HEAD)
+          up=$(git rev-parse upstream/main)
+          if [ "$before" = "$up" ]; then
+            echo "main already at upstream $up"; exit 0
+          fi
+          if ! git merge-base --is-ancestor "$before" "$up"; then
+            echo "::error::fork main ($before) has diverged from upstream ($up); refusing to merge"; exit 1
+          fi
+          git merge --ff-only upstream/main
+          git push origin HEAD:main
+          echo "fast-forwarded main $before -> $up"
